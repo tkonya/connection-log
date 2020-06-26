@@ -9,25 +9,26 @@ import (
 	"net/smtp"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 )
 
 var PingAddresses = []string{
-	"1.1.1.1", // cloudflare dns
-	"1.0.0.1", // cloudflare dns
-	"8.8.8.8", // google dns
-	"8.8.4.4", // google dns
+	"1.1.1.1",        // cloudflare dns
+	"1.0.0.1",        // cloudflare dns
+	"8.8.8.8",        // google dns
+	"8.8.4.4",        // google dns
 	"208.67.222.222", // open dns
 	"208.67.220.220", // open dns
-	"37.235.1.174", // FreeDNS
-	"37.235.1.177", // FreeDNS
-	"209.244.0.3", // Level 3
-	"209.244.0.4", // Level 3
-	"64.6.64.6", // Verisign
-	"64.6.65.6", // Verisign
-	"198.153.192.1", // Norton
-	"198.153.194.1", // Norton
+	"37.235.1.174",   // FreeDNS
+	"37.235.1.177",   // FreeDNS
+	"209.244.0.3",    // Level 3
+	"209.244.0.4",    // Level 3
+	"64.6.64.6",      // Verisign
+	"64.6.65.6",      // Verisign
+	"198.153.192.1",  // Norton
+	"198.153.194.1",  // Norton
 	"google.com",
 	"amazon.com",
 	"facebook.com",
@@ -91,9 +92,15 @@ func recordSpeed(speedsCsv *csv.Writer, speedTicker *time.Ticker) error {
 	if strings.HasPrefix(splitOut[0], "\"") {
 		splitOut[0] = splitOut[0][1:]
 	}
-	if strings.HasSuffix(splitOut[len(splitOut) - 1], "\"") {
-		splitOut[len(splitOut) - 1] = splitOut[len(splitOut) - 1][:len(splitOut[len(splitOut) - 1]) - 1]
+	if strings.HasSuffix(splitOut[len(splitOut)-1], "\"") {
+		splitOut[len(splitOut)-1] = splitOut[len(splitOut)-1][:len(splitOut[len(splitOut)-1])-1]
 	}
+
+	downSpeed, err := strconv.ParseFloat(splitOut[5], 64)
+	upSpeed, err := strconv.ParseFloat(splitOut[6], 64)
+
+	// 1 Megabit = 125000 Byte
+	splitOut = append(splitOut, fmt.Sprintf("%f", downSpeed*125000), fmt.Sprintf("%f", upSpeed*125000))
 
 	err = speedsCsv.Write(append([]string{time.Now().Format(time.RFC3339)}, splitOut...))
 	if err != nil {
@@ -190,7 +197,7 @@ func createCsvFiles() (*os.File, *csv.Writer, *os.File, *csv.Writer) {
 		panic(err)
 	}
 	speedsCsv := csv.NewWriter(speedsFile)
-	err = speedsCsv.Write([]string{"date", "server name", "server id", "latency", "jitter", "packet loss", "download", "upload", "download bytes", "upload bytes", "share url"})
+	err = speedsCsv.Write([]string{"date", "server name", "server id", "latency", "jitter", "packet loss", "download", "upload", "download bytes", "upload bytes", "share url", "down Mb/s", "up Mb/s"})
 	if err != nil {
 		panic(err)
 	}
@@ -200,7 +207,7 @@ func createCsvFiles() (*os.File, *csv.Writer, *os.File, *csv.Writer) {
 
 func pingRandom(quantity int) (string, float64) {
 
-	address := PingAddresses[rand.Int() % len(PingAddresses)]
+	address := PingAddresses[rand.Int()%len(PingAddresses)]
 
 	// select a random address to ping
 	pinger, err := ping.NewPinger(address)
