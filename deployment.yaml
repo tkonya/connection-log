@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: connection-log
+  labels:
+    app: connection-log
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: connection-log
+  template:
+    metadata:
+      labels:
+        app: connection-log
+    spec:
+      containers:
+        - name: connection-logger
+          image: tkonya/connection-logger:latest
+          env:
+            - name: EMAIL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: tk-email-creds
+                  key: username
+            - name: EMAIL_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: tk-email-creds
+                  key: password
