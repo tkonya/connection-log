@@ -96,11 +96,13 @@ func recordSpeed(speedsCsv *csv.Writer, speedTicker *time.Ticker) error {
 		splitOut[len(splitOut)-1] = splitOut[len(splitOut)-1][:len(splitOut[len(splitOut)-1])-1]
 	}
 
+	// these speeds are measured in Bytes per second
 	downSpeed, err := strconv.ParseFloat(splitOut[5], 64)
 	upSpeed, err := strconv.ParseFloat(splitOut[6], 64)
 
 	// 1 Megabit = 125000 Byte
-	splitOut = append(splitOut, fmt.Sprintf("%f", downSpeed*125000), fmt.Sprintf("%f", upSpeed*125000))
+	// we would like to list Megabit per second also, for ease of use, because that is the unit our advertised speeds are in
+	splitOut = append(splitOut, fmt.Sprintf("%f", downSpeed/125000), fmt.Sprintf("%f", upSpeed/125000))
 
 	err = speedsCsv.Write(append([]string{time.Now().Format(time.RFC3339)}, splitOut...))
 	if err != nil {
@@ -111,7 +113,7 @@ func recordSpeed(speedsCsv *csv.Writer, speedTicker *time.Ticker) error {
 
 func emailResults(pingsFile *os.File, speedsFile *os.File) error {
 	e := email.NewEmail()
-	e.From = os.Getenv("EMAIL_USER") + " <" + os.Getenv("EMAIL_USER") + ">"
+	e.From = os.Getenv("EMAIL_USER")
 	e.To = []string{os.Getenv("EMAIL_TO")}
 	e.Subject = "Speed and Ping reports " + time.Now().Format("2006-01-02")
 	e.Text = []byte("Attached you should find your internet speed report")
