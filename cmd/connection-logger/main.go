@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/csv"
 	"fmt"
 	"github.com/jordan-wright/email"
@@ -9,11 +10,13 @@ import (
 	"net/smtp"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strconv"
 	"strings"
 	"time"
 )
 
+// ping addresses are what we randomly hit to check liveness
 var PingAddresses = []string{
 	"1.1.1.1",        // cloudflare dns
 	"1.0.0.1",        // cloudflare dns
@@ -29,10 +32,6 @@ var PingAddresses = []string{
 	"64.6.65.6",      // Verisign
 	"198.153.192.1",  // Norton
 	"198.153.194.1",  // Norton
-	"google.com",
-	"amazon.com",
-	"facebook.com",
-	"netflix.com",
 }
 
 func main() {
@@ -41,39 +40,51 @@ func main() {
 
 	pingsFile, pingsCsv, speedsFile, speedsCsv := createCsvFiles()
 
+	sendResults := func() {
+		pingsCsv.Flush()
+		speedsCsv.Flush()
+		if err := emailResults(pingsFile, speedsFile); err != nil {
+			fmt.Println("error stopped emailing")
+			return // if we can't get the results, it's done, there is no more to do
+		}
+		err := os.Remove(pingsFile.Name())
+		if err != nil {
+			fmt.Println(err)
+		}
+		err = os.Remove(speedsFile.Name())
+		if err != nil {
+			fmt.Println(err)
+		}
+		pingsFile, pingsCsv, speedsFile, speedsCsv = createCsvFiles()
+	}
+
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, os.Interrupt)
+
 	for {
 		select {
 		case <-pingTicker.C:
-			//fmt.Println("pinging")
-			if err := recordPing(pingsCsv, pingTicker); err != nil {
+			if err := recordPing(pingsCsv); err != nil {
 				fmt.Println(err.Error())
-				//pingTicker.Stop()
-				//pingTicker = time.NewTicker(time.Hour * 1000000)
 			}
 		case <-speedTicker.C:
-			//fmt.Println("speed testing")
-			if err := recordSpeed(speedsCsv, speedTicker); err != nil {
+			if err := recordSpeed(speedsCsv); err != nil {
 				fmt.Println(err.Error())
-				//speedTicker.Stop()
-				//speedTicker = time.NewTicker(time.Hour * 1000000)
 			}
 		case <-emailTicker.C:
-			//fmt.Println("emailing")
-			pingsCsv.Flush()
-			speedsCsv.Flush()
-			if err := emailResults(pingsFile, speedsFile); err != nil {
-				fmt.Println("error stopped emailing")
-				return // if we can't get the results, it's done, there is no more to do
-			}
-			os.Remove(pingsFile.Name())
-			os.Remove(speedsFile.Name())
-			pingsFile, pingsCsv, speedsFile, speedsCsv = createCsvFiles()
+			sendResults()
+		case <-context.Background().Done():
+			sendResults()
+			return
+		case <-signalChan:
+			sendResults()
+			return
 		}
 	}
 
 }
 
-func recordPing(pingsCsv *csv.Writer, pingTicker *time.Ticker) error {
+func recordPing(pingsCsv *csv.Writer) error {
 	address, packetLoss := pingRandom(3)
 	err := pingsCsv.Write([]string{time.Now().Format(time.RFC3339), address, fmt.Sprintf("%f", packetLoss)})
 	if err != nil {
@@ -82,7 +93,7 @@ func recordPing(pingsCsv *csv.Writer, pingTicker *time.Ticker) error {
 	return nil
 }
 
-func recordSpeed(speedsCsv *csv.Writer, speedTicker *time.Ticker) error {
+func recordSpeed(speedsCsv *csv.Writer) error {
 	result, err := exec.Command("./speedtest", "-p", "no", "-f", "csv", "--accept-license").Output()
 	if err != nil {
 		return fmt.Errorf("command error stopped speedtest: %w", err)
@@ -142,7 +153,7 @@ func emailResults(pingsFile *os.File, speedsFile *os.File) error {
 
 func createTickers() (*time.Ticker, *time.Ticker, *time.Ticker) {
 	var pingTicker *time.Ticker
-	if len(os.Getenv("PING_INTERVAL_SEC")) < 1 {
+	if len(os.Getenv("PING_INTERVAL")) < 1 {
 		pingTicker = time.NewTicker(time.Second * 30)
 	} else {
 		parsedDuration, err := time.ParseDuration(os.Getenv("PING_INTERVAL"))
@@ -155,7 +166,7 @@ func createTickers() (*time.Ticker, *time.Ticker, *time.Ticker) {
 
 	var speedTicker *time.Ticker
 	if len(os.Getenv("SPEED_INTERVAL")) < 1 {
-		speedTicker = time.NewTicker(time.Minute * 2)
+		speedTicker = time.NewTicker(time.Minute * 20)
 	} else {
 		parsedDuration, err := time.ParseDuration(os.Getenv("SPEED_INTERVAL"))
 		if err != nil {
@@ -167,7 +178,7 @@ func createTickers() (*time.Ticker, *time.Ticker, *time.Ticker) {
 
 	var emailTicker *time.Ticker
 	if len(os.Getenv("EMAIL_INTERVAL")) < 1 {
-		emailTicker = time.NewTicker(time.Minute * 5)
+		emailTicker = time.NewTicker(time.Hour * 24 * 7)
 	} else {
 		parsedDuration, err := time.ParseDuration(os.Getenv("EMAIL_INTERVAL"))
 		if err != nil {
