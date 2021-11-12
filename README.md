@@ -12,6 +12,10 @@ EMAIL_PASS - password to above account
 
 EMAIL_TO - email address to send the email to
 
+Create the secret in your kubernetes namespace like this:
+
+```kubectl create secret generic tk-email-creds --from-literal=EMAIL_USER=youremail@gmail.com --from-literal=EMAIL_PASS=password1234```
+
 ### Optional environmental Variables
 
 PING_INTERVAL - time between ping checks - default "30s"
