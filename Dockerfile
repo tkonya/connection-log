@@ -1,4 +1,4 @@
-FROM golang:1.14.4-alpine3.11 as builder
+FROM golang:1.17.3-alpine3.14 as builder
 MAINTAINER Trevor Konya <trevor@konya.io>
 
 #ENV EMAIL_USER youremail@gmail.com
@@ -15,7 +15,7 @@ WORKDIR /build
 RUN go mod vendor
 RUN GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" ./cmd/connection-logger/...
 
-FROM alpine:3.11
+FROM alpine:3.14
 COPY --from=builder /build/connection-logger /app/
 COPY --from=builder /build/scripts/speedtest /app/
 WORKDIR /app
